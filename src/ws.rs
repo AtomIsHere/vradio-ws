@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use futures::{FutureExt, StreamExt};
 use serde::Deserialize;
 use serde_json::from_str;
@@ -5,6 +6,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
 use crate::{Client, Clients};
+use crate::message_receive::Receiver;
 
 #[derive(Deserialize, Debug)]
 pub struct TopicsRequest {
@@ -54,16 +56,24 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
         return;
     }
 
-    let topics_req: TopicsRequest = match from_str(&message) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("error while passing message to topics request: {}", e);
-            return;
-        }
-    };
+    println!("{}", message);
+}
 
-    let mut locked = clients.write().await;
-    if let Some(v) = locked.get_mut(id) {
-        v.topics = topics_req.topics;
+pub struct TopicRequestReceiver;
+#[async_trait]
+impl Receiver for TopicRequestReceiver {
+    async fn receive_msg(&self, id: &str, msg: &str, clients: &Clients) {
+        let topics_req: TopicsRequest = match from_str(&msg) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("error while passing message to topics request: {}", e);
+                return;
+            }
+        };
+
+        let mut locked = clients.write().await;
+        if let Some(v) = locked.get_mut(id) {
+            v.topics = topics_req.topics;
+        }
     }
 }

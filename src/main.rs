@@ -8,6 +8,7 @@ use warp::ws::Message;
 
 mod handler;
 mod ws;
+mod message_receive;
 
 type Result<T> = std::result::Result<T, Rejection>;
 type Clients = Arc<RwLock<HashMap<String, Client>>>;
