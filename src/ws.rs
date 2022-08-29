@@ -66,7 +66,7 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
                 Err(_) => return,
             };
         }
-        None => eprintln!("Expected <")
+        None => eprintln!("Expected <id>=<value>")
     }
 }
 
