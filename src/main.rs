@@ -4,13 +4,17 @@ use std::sync::{Arc};
 use tokio::sync::{mpsc, RwLock};
 use warp::{Filter, Rejection};
 use warp::ws::Message;
+use thiserror::Error;
 
 mod handler;
 mod ws;
 mod message_receive;
+mod redis_direct;
 
 type Result<T> = std::result::Result<T, Rejection>;
 type Clients = Arc<RwLock<HashMap<String, Client>>>;
+
+const REDIS_CON_STRING: &str = "redis://127.0.0.1/";
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -22,6 +26,8 @@ pub struct Client {
 #[tokio::main]
 async fn main() {
     let clients: Clients = Arc::new(RwLock::new(HashMap::new()));
+
+    let redis_client = redis::Client::open(REDIS_CON_STRING).expect("can create redis client");
 
     let health_route = warp::path!("health").and_then(handler::health_handler);
 
@@ -46,6 +52,7 @@ async fn main() {
         .and(warp::ws())
         .and(warp::path::param())
         .and(with_clients(clients.clone()))
+        .and(with_redis_client(redis_client))
         .and_then(handler::ws_handler);
 
     let routes = health_route
@@ -59,4 +66,24 @@ async fn main() {
 
 fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = Infallible> + Clone {
     warp::any().map(move || clients.clone())
+}
+
+fn with_redis_client(client: redis::Client) -> impl Filter<Extract = (redis::Client,), Error = Infallible> + Clone {
+    warp::any().map(move || client.clone())
+}
+
+#[derive(Error, Debug)]
+pub enum RedisError {
+    #[error("direct redis error: {0}")]
+    DirectError(#[from] DirectError)
+}
+
+#[derive(Error, Debug)]
+pub enum DirectError {
+    #[error("error paring string from redis_direct result: {0}")]
+    RedisTypeError(redis::RedisError),
+    #[error("error executing redis_direct command: {0}")]
+    RedisCMDError(redis::RedisError),
+    #[error("error creating Redis client: {0}")]
+    RedisClientError(redis::RedisError),
 }

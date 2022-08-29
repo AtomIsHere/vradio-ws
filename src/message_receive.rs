@@ -5,7 +5,7 @@ use crate::ws::TopicRequestReceiver;
 
 #[async_trait]
 pub trait Receiver {
-    async fn receive_msg(&self, id: &str, msg: &str, clients: &Clients);
+    async fn receive_msg(&self, id: &str, msg: &str, clients: &Clients, redis_client: redis::Client);
 }
 
 pub fn get_receiver(id: &str) -> Result<&dyn Receiver, String> {

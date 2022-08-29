@@ -8,13 +8,14 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
 use crate::{Client, Clients};
 use crate::message_receive::{get_receiver, Receiver};
+use crate::redis_direct::get_con;
 
 #[derive(Deserialize, Debug)]
 pub struct TopicsRequest {
     topics: Vec<String>,
 }
 
-pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut client: Client) {
+pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut client: Client, redis_client: redis::Client) {
     let (client_ws_sender, mut client_ws_rcv) = ws.split();
     let (client_sender, client_rcv) = mpsc::unbounded_channel();
 
@@ -38,14 +39,14 @@ pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut 
                 break;
             }
         };
-        client_msg(&id, msg, &clients).await;
+        client_msg(&id, msg, &clients, redis_client.clone()).await;
     }
 
     clients.write().await.remove(&id);
     println!("{} disconnected", id)
 }
 
-async fn client_msg(id: &str, msg: Message, clients: &Clients) {
+async fn client_msg(id: &str, msg: Message, clients: &Clients, redis_client: redis::Client) {
     println!("received message from {}: {:?}", id, msg);
 
     let message = match msg.to_str() {
@@ -62,7 +63,7 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
     match message.split_once('=') {
         Some((receiver_id, received)) => {
             match get_receiver(receiver_id) {
-                Ok(v) => block_on(v.receive_msg(id, received, clients)),
+                Ok(v) => block_on(v.receive_msg(id, received, clients, redis_client)),
                 Err(_) => return,
             };
         }
@@ -73,7 +74,7 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
 pub struct TopicRequestReceiver;
 #[async_trait]
 impl Receiver for TopicRequestReceiver {
-    async fn receive_msg(&self, id: &str, msg: &str, clients: &Clients) {
+    async fn receive_msg(&self, id: &str, msg: &str, clients: &Clients, redis_client: redis::Client) {
         let topics_req: TopicsRequest = match from_str(&msg) {
             Ok(v) => v,
             Err(e) => {
