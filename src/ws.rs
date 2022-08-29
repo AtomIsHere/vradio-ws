@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 use futures::{FutureExt, StreamExt};
+use futures::executor::block_on;
 use serde::Deserialize;
 use serde_json::from_str;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
 use crate::{Client, Clients};
-use crate::message_receive::Receiver;
+use crate::message_receive::{get_receiver, Receiver};
 
 #[derive(Deserialize, Debug)]
 pub struct TopicsRequest {
@@ -57,6 +58,16 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients) {
     }
 
     println!("{}", message);
+
+    match message.split_once('=') {
+        Some((receiver_id, received)) => {
+            match get_receiver(receiver_id) {
+                Ok(v) => block_on(v.receive_msg(id, received, clients)),
+                Err(_) => return,
+            };
+        }
+        None => eprintln!("Expected <")
+    }
 }
 
 pub struct TopicRequestReceiver;
