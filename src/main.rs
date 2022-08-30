@@ -10,6 +10,7 @@ mod handler;
 mod ws;
 mod message_receive;
 mod redis_direct;
+mod station;
 
 type Result<T> = std::result::Result<T, Rejection>;
 type Clients = Arc<RwLock<HashMap<String, Client>>>;
