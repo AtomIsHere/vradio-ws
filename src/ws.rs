@@ -8,7 +8,6 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
 use crate::{Client, Clients};
 use crate::message_receive::{get_receiver, Receiver};
-use crate::redis_direct::get_con;
 
 #[derive(Deserialize, Debug)]
 pub struct TopicsRequest {
@@ -74,7 +73,7 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients, redis_client: red
 pub struct TopicRequestReceiver;
 #[async_trait]
 impl Receiver for TopicRequestReceiver {
-    async fn receive_msg(&self, id: &str, msg: &str, clients: &Clients, redis_client: redis::Client) {
+    async fn receive_msg(&self, id: &str, msg: &str, clients: &Clients, _redis_client: redis::Client) {
         let topics_req: TopicsRequest = match from_str(&msg) {
             Ok(v) => v,
             Err(e) => {
