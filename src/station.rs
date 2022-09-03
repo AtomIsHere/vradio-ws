@@ -1,12 +1,9 @@
 use async_trait::async_trait;
-use redis::{Value};
 use redis::aio::Connection;
 use uuid::{Uuid};
 use crate::{Clients};
 use crate::message_receive::Receiver;
 use crate::redis_direct::{get_con, get_str};
-use redis::AsyncCommands;
-use serde_redis::RedisDeserialize;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -41,13 +38,19 @@ pub enum StreamingService {
     #[serde(rename(deserialize = "NETFLIX"))]
     Netflix
 }
-pub async fn from_redis(id: Uuid, redis_connection: &mut Connection) -> Result<Station, serde_redis::decode::Error> {
-    let val: Value = match redis_connection.hgetall::<String, Value>("Station:".to_owned() + &id.to_string()).await {
+pub async fn from_redis(id: Uuid, redis_connection: &mut Connection) -> Option<Station> {
+    let station_key = &("Station_".to_owned() + &id.to_string());
+    let from_redis = match get_str(redis_connection, station_key).await {
         Ok(v) => v,
-        Err(_) => return Err(serde_redis::decode::Error::Custom("could not find val".to_string())),
+        Err(_) => return None,
     };
 
-    val.deserialize()
+    let to_json: Station = match serde_json::from_str(&from_redis) {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
+
+    return Some(to_json);
 }
 
 pub struct JoinCodeReceiver;
@@ -82,13 +85,12 @@ impl Receiver for JoinCodeReceiver {
         };
 
         let station: Station = match from_redis(id, &mut redis_con).await {
-            Ok(v) => v,
-            Err(a) => {
+            Some(v) => v,
+            None => {
                 eprintln!("invalid redis hash");
                 return;
             }
         };
 
-        println!("a")
     }
 }
