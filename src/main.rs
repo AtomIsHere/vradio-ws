@@ -5,15 +5,20 @@ use tokio::sync::{mpsc, RwLock};
 use warp::{Filter, Rejection};
 use warp::ws::Message;
 use thiserror::Error;
+use crate::message_receive::{Receiver, ReceiverManager};
+use crate::station::StationManager;
+use crate::ws::TopicRequestReceiver;
 
 mod handler;
 mod ws;
 mod message_receive;
 mod redis_direct;
 mod station;
+mod timer;
 
 type Result<T> = std::result::Result<T, Rejection>;
 type Clients = Arc<RwLock<HashMap<String, Client>>>;
+type Receivers = Arc<ReceiverManager>;
 
 const REDIS_CON_STRING: &str = "redis://127.0.0.1/";
 
@@ -29,6 +34,15 @@ async fn main() {
     let clients: Clients = Arc::new(RwLock::new(HashMap::new()));
 
     let redis_client = redis::Client::open(REDIS_CON_STRING).expect("can create redis client");
+
+    let mut receiver_map: HashMap<String, Box<dyn Receiver>> = HashMap::new();
+
+    receiver_map.insert("topic_request".to_string(), Box::new(TopicRequestReceiver {}));
+    receiver_map.insert("join_station".to_string(), Box::new(StationManager {
+        stations: Arc::new(RwLock::new(HashMap::new()))
+    }));
+
+    let receiver_manager: Receivers = Arc::new(ReceiverManager {receivers: receiver_map});
 
     let health_route = warp::path!("health").and_then(handler::health_handler);
 
@@ -54,6 +68,7 @@ async fn main() {
         .and(warp::path::param())
         .and(with_clients(clients.clone()))
         .and(with_redis_client(redis_client))
+        .and(with_receiver_manager(receiver_manager))
         .and_then(handler::ws_handler);
 
     let routes = health_route
@@ -71,6 +86,10 @@ fn with_clients(clients: Clients) -> impl Filter<Extract = (Clients,), Error = I
 
 fn with_redis_client(client: redis::Client) -> impl Filter<Extract = (redis::Client,), Error = Infallible> + Clone {
     warp::any().map(move || client.clone())
+}
+
+fn with_receiver_manager(receivers: Receivers) -> impl Filter<Extract = (Receivers,), Error = Infallible> + Clone {
+    warp::any().map(move || receivers.clone())
 }
 
 #[derive(Error, Debug)]

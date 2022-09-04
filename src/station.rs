@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::sync::{Arc};
 use async_trait::async_trait;
 use redis::aio::Connection;
 use uuid::{Uuid};
@@ -5,6 +7,7 @@ use crate::{Clients};
 use crate::message_receive::Receiver;
 use crate::redis_direct::{get_con, get_str};
 use serde::Deserialize;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct Station {
@@ -53,9 +56,12 @@ pub async fn from_redis(id: Uuid, redis_connection: &mut Connection) -> Option<S
     return Some(to_json);
 }
 
-pub struct JoinCodeReceiver;
+pub struct StationManager {
+    pub(crate) stations: Arc<RwLock<HashMap<Uuid, Station>>>
+}
+
 #[async_trait]
-impl Receiver for JoinCodeReceiver {
+impl Receiver for StationManager {
     async fn receive_msg(&self, _id: &str, msg: &str, _clients: &Clients, redis_client: redis::Client) {
         let mut redis_con: Connection =  match get_con(redis_client).await {
             Ok(v) => v,

@@ -6,15 +6,15 @@ use serde_json::from_str;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
-use crate::{Client, Clients};
-use crate::message_receive::{get_receiver, Receiver};
+use crate::{Client, Clients, Receivers};
+use crate::message_receive::{Receiver};
 
 #[derive(Deserialize, Debug)]
 pub struct TopicsRequest {
     topics: Vec<String>,
 }
 
-pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut client: Client, redis_client: redis::Client) {
+pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut client: Client, redis_client: redis::Client, receiver_manager: Receivers) {
     let (client_ws_sender, mut client_ws_rcv) = ws.split();
     let (client_sender, client_rcv) = mpsc::unbounded_channel();
 
@@ -38,14 +38,14 @@ pub async fn client_connection(ws: WebSocket, id: String, clients: Clients, mut 
                 break;
             }
         };
-        client_msg(&id, msg, &clients, redis_client.clone()).await;
+        client_msg(&id, msg, &clients, redis_client.clone(), &receiver_manager).await;
     }
 
     clients.write().await.remove(&id);
     println!("{} disconnected", id)
 }
 
-async fn client_msg(id: &str, msg: Message, clients: &Clients, redis_client: redis::Client) {
+async fn client_msg(id: &str, msg: Message, clients: &Clients, redis_client: redis::Client, receiver_manager: &Receivers) {
     println!("received message from {}: {:?}", id, msg);
 
     let message = match msg.to_str() {
@@ -61,9 +61,9 @@ async fn client_msg(id: &str, msg: Message, clients: &Clients, redis_client: red
 
     match message.split_once('=') {
         Some((receiver_id, received)) => {
-            match get_receiver(receiver_id) {
-                Ok(v) => block_on(v.receive_msg(id, received, clients, redis_client)),
-                Err(_) => return,
+            match receiver_manager.receivers.get(receiver_id) {
+                Some(v) => block_on(v.receive_msg(id, received, clients, redis_client)),
+                None => return,
             };
         }
         None => eprintln!("Expected <id>=<value>")

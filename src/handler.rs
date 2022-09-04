@@ -4,7 +4,7 @@ use warp::http::StatusCode;
 use warp::Reply;
 use warp::reply::{json};
 use warp::ws::Message;
-use crate::{Client, Clients, Result, ws};
+use crate::{Client, Clients, Receivers, Result, ws};
 
 
 #[derive(Deserialize, Debug)]
@@ -69,10 +69,10 @@ pub async fn unregister_handler(id: String, clients: Clients) -> Result<impl Rep
     Ok(StatusCode::OK)
 }
 
-pub async fn ws_handler(ws: warp::ws::Ws, id: String, clients: Clients, redis_client: redis::Client) -> Result<impl Reply> {
+pub async fn ws_handler(ws: warp::ws::Ws, id: String, clients: Clients, redis_client: redis::Client, receiver_manger: Receivers) -> Result<impl Reply> {
     let client = clients.read().await.get(&id).cloned();
     match client {
-        Some(c) => Ok(ws.on_upgrade(move |socket| ws::client_connection(socket, id, clients, c, redis_client))),
+        Some(c) => Ok(ws.on_upgrade(move |socket| ws::client_connection(socket, id, clients, c, redis_client, receiver_manger))),
         None => Err(warp::reject::not_found()),
     }
 }
