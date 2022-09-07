@@ -1,8 +1,8 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::Clients;
-use crate::ws::TopicRequestReceiver;
 
 #[async_trait]
 pub trait Receiver: Send + Sync {
@@ -10,5 +10,5 @@ pub trait Receiver: Send + Sync {
 }
 
 pub struct ReceiverManager {
-    pub receivers: HashMap<String, Box<dyn Receiver>>,
+    pub receivers: HashMap<String, Arc<dyn Receiver>>,
 }

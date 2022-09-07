@@ -12,7 +12,7 @@ impl Timer {
     }
 
     pub fn get_time(&self) -> Result<u64, SystemTimeError> {
-        return match self.start_time.duration_since(SystemTime::now()) {
+        return match SystemTime::now().duration_since(self.start_time) {
             Ok(v) => Ok(v.as_secs()),
             Err(e) => Err(e),
         }

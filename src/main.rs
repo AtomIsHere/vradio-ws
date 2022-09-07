@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::{Arc};
+use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use warp::{Filter, Rejection};
 use warp::ws::Message;
 use thiserror::Error;
+use tokio::time;
 use crate::message_receive::{Receiver, ReceiverManager};
 use crate::station::StationManager;
 use crate::ws::TopicRequestReceiver;
@@ -35,16 +37,18 @@ async fn main() {
 
     let redis_client = redis::Client::open(REDIS_CON_STRING).expect("can create redis client");
 
-    let mut receiver_map: HashMap<String, Box<dyn Receiver>> = HashMap::new();
+    let mut receiver_map: HashMap<String, Arc<dyn Receiver>> = HashMap::new();
+    let stations = Arc::new(StationManager::new());
+    let stations_clone = stations.clone();
 
-    receiver_map.insert("topic_request".to_string(), Box::new(TopicRequestReceiver {}));
-    receiver_map.insert("join_station".to_string(), Box::new(StationManager {
-        stations: Arc::new(RwLock::new(HashMap::new()))
-    }));
+
+    receiver_map.insert("topic_request".to_string(), Arc::new(TopicRequestReceiver {}));
+    receiver_map.insert("join_station".to_string(), stations);
 
     let receiver_manager: Receivers = Arc::new(ReceiverManager {receivers: receiver_map});
 
     let health_route = warp::path!("health").and_then(handler::health_handler);
+
 
     let register = warp::path("register");
     let register_routes = register
@@ -76,6 +80,18 @@ async fn main() {
         .or(ws_route)
         .or(publish)
         .with(warp::cors().allow_any_origin());
+
+    let clients_clone = clients.clone();
+
+    tokio::spawn(async move {
+        let mut interval = time::interval(Duration::from_secs(30));
+        let new_client = redis::Client::open(REDIS_CON_STRING).expect("can create redis client");
+
+        loop {
+            interval.tick().await;
+            stations_clone.update_clients(&clients_clone, new_client.clone()).await;
+        }
+    });
 
     warp::serve(routes).run(([127,0,0,1], 8000)).await
 }
