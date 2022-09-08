@@ -89,7 +89,10 @@ impl Receiver for StationManager {
         };
 
         let mut string_msg = msg.to_string().clone();
-        string_msg.truncate(string_msg.len() - 1);
+
+        if string_msg.chars().last().unwrap() == '\n' {
+            string_msg.truncate(string_msg.len() - 1);
+        }
 
         let result = match get_str(&mut redis_con, &("join-code:".to_owned() + &string_msg)).await {
             Ok(v) => v,
